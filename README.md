@@ -2,9 +2,11 @@
 nano file system: Operating System Design example of minimum file system
 
 ## Compile
+  * make clean
   * make
 
 ## Execute included example
+  * dd if=/dev/zero of=tmpfile.dat bs=1024 count=32
   * ./nanofs
 
 ```bash

@@ -238,12 +238,12 @@ int nanofs_meta_readFromDisk ( void )
     // read block 0 from disk to sbloques[0]
     bread(DISK, 0, &(sbloques[0]) );
 
-    // leer los bloques para el mapa de i-nodos
+    // read the blocks where the i-node map is stored
     for (int i=0; i<sbloques[0].numInodeMapBlocks; i++) {
            bread(DISK, 2+i, ((char *)i_map + i*BLOCK_SIZE)) ;
     }
 
-    // leer los bloques para el mapa de bloques de datos
+    // read the blocks where the block map is stored
     for (int i=0; i<sbloques[0].numDataMapBlocks; i++) {
           bread(DISK, 2+i+sbloques[0].numInodeMapBlocks, ((char *)b_map + i*BLOCK_SIZE));
     }
@@ -261,12 +261,12 @@ int nanofs_meta_writeToDisk ( void )
     // write block 0 to disk from sbloques[0]
     bwrite(DISK, 0, &(sbloques[0]) );
 
-    // escribir los bloques para el mapa de i-nodos
+    // write the blocks where the i-node map is stored
     for (int i=0; i<sbloques[0].numInodeMapBlocks; i++) {
            bwrite(DISK, 2+i, ((char *)i_map + i*BLOCK_SIZE)) ;
     }
 
-    // escribir los bloques para el mapa de bloques de datos
+    // write the blocks where the block map is stored
     for (int i=0; i<sbloques[0].numDataMapBlocks; i++) {
           bwrite(DISK, 2+i+sbloques[0].numInodeMapBlocks, ((char *)b_map + i*BLOCK_SIZE));
     }
@@ -291,7 +291,6 @@ int nanofs_meta_setDefault ( void )
     sbloques[0].firstDataBlock     = 12;
     sbloques[0].devSize            = 20;
 
-    //
     for (int i=0; i<sbloques[0].numInodos; i++) {
          i_map[i] = 0; // free
     }
@@ -472,7 +471,7 @@ int nanofs_write ( int fd, char *buffer, int size )
 
 
 /*
- *
+ *  Example Test
  */
 
 int main()

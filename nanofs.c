@@ -322,7 +322,14 @@ int nanofs_mount ( void )
 
 int nanofs_umount ( void )
 {
+    // si NO mountado -> error
     if (0 == esta_montado) {
+        return -1 ;
+    }
+
+    // si algún fichero está abierto -> error
+    for (int i=0; i<sbloques[0].numInodos; i++) {
+    if (1 == inodos_x[i].abierto)
         return -1 ;
     }
 

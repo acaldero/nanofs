@@ -204,28 +204,28 @@ int nanofs_namei ( char *fname )
 
 int nanofs_bmap ( int inodo_id, int offset )
 {
-    int b[BLOCK_SIZE/4];
+    int b[BLOCK_SIZE/4] ;
+    int logical_block ;
 
     // check inode id.
     if (inodo_id > sbloques[0].numInodos) {
         return -1;
     }
 
+    // logical block
+    logical_block = offset / BLOCK_SIZE ;
+    if (logical_block > (BLOCK_SIZE/4)) {
+        return -1 ;
+    }
+
     // return direct block
-    if (offset < BLOCK_SIZE) {
+    if (0 == logical_block) {
         return inodos[inodo_id].directBlock;
     }
 
-    if (offset < BLOCK_SIZE*BLOCK_SIZE/4)
-    {
-         bread(DISK,
-               sbloques[0].firstDataBlock +
-               inodos[inodo_id].indirectBlock, b);
-         offset = (offset - BLOCK_SIZE) / BLOCK_SIZE;
-         return b[offset] ;
-    }
-
-    return -1;
+    // return indirect block
+    bread(DISK, sbloques[0].firstDataBlock + inodos[inodo_id].indirectBlock, b);
+    return b[logical_block - 1] ;
 }
 
 

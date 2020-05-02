@@ -14,6 +14,10 @@ run:
 	@echo "Running..."
 	./nanofs
 
+view:
+	@echo "Exploring raw tmpfile.dat as char array..."
+	od -c tmpfile.dat 
+
 clean:
 	@echo "Cleaning..."
 	rm -fr nanofs nanofs.o nanofs.dSYM

@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 
 
 /*
@@ -74,39 +75,41 @@ int bwrite ( char *devname, int bid, void *buffer )
 
 // Superblock
 typedef struct {
-    unsigned int numMagic;	        /* Número mágico del superbloque (por ejemplo 0x12345) */
-                                        /* Superblock magic number: 0x12345 */
-    unsigned int numInodeMapBlocks;     /* Número de bloques de disco del mapa inodes */
-                                        /* Number of block for the inode map */
-    unsigned int numDataMapBlocks;      /* Número de bloques de disco del mapa  datos */
-                                        /* Number of block for the data map */
-    unsigned int numInodes; 	        /* Número de inodes en el dispositivo */
-                                        /* Number of inodes in the device */
-    unsigned int numDataBlocks;         /* Número de bloques de datos en el disp. */
-                                        /* Number of data blocks in the device */
-    unsigned int firstInodeBlock;	/* 1º inodo del disp. (inodo raíz) */
-                                        /* Block number of the first inode (root inode) */
-    unsigned int firstDataBlock;        /* 1º bloque de disco para datos tras metadatos */
-                                        /* Block number of the first data block */
-    unsigned int sizeDevice;	        /* Tamaño total del disp. (en bytes) */
-                                        /* Total size of the device in bytes */
+    uint32_t numMagic;	          /* Número mágico del superbloque (por ejemplo 0x12345) */
+                                  /* Superblock magic number: 0x12345 */
+    uint32_t numInodeMapBlocks;   /* Número de bloques de disco del mapa inodes */
+                                  /* Number of block for the inode map */
+    uint32_t numDataMapBlocks;    /* Número de bloques de disco del mapa  datos */
+                                  /* Number of block for the data map */
+    uint32_t numInodes; 	  /* Número de inodes en el dispositivo */
+                                  /* Number of inodes in the device */
+    uint32_t numInodesBlocks;     /* Número de bloques de inodos en el disp. */
+                                  /* Number of inodos blocks in the device */
+    uint32_t numDataBlocks;       /* Número de bloques de datos en el disp. */
+                                  /* Number of data blocks in the device */
+    uint32_t firstInodeBlock;	  /* 1º inodo del disp. (inodo raíz) */
+                                  /* Block number of the first inode (root inode) */
+    uint32_t firstDataBlock;      /* 1º bloque de disco para datos tras metadatos */
+                                  /* Block number of the first data block */
+    uint32_t sizeDevice;	  /* Tamaño total del disp. (en bytes) */
+                                  /* Total size of the device in bytes */
 } TypeSuperblock ;
 
 
 // Inodes
 typedef struct {
-    unsigned int type;	                  /* T_FILE o T_DIRECTORY */
-	                                  /* T_FILE or T_DIRECTORY */
-    char name[200];	                  /* Nombre del fichero/ directorio asociado */
-	                                  /* Name of the associated file/directory */
-    unsigned int inodesContents[200];     /* si (tipo==dir) -> lista de los inodes del directorio */
-	                                  /* if (type==dir) -> list of the inodes in directory */
-    unsigned int size;	                  /* Tamaño actual del fichero en bytes */
-	                                  /* Size in bytes */
-    unsigned int directBlock;	          /* Número del bloque directo */
-	                                  /* Number of the direct block */
-    unsigned int indirectBlock;	          /* Número del bloque indirecto */
-	                                  /* Number of the indirect block */
+    uint32_t type;	              /* T_FILE o T_DIRECTORY */
+	                              /* T_FILE or T_DIRECTORY */
+    char name[200];	              /* Nombre del fichero/directorio asociado (termina en cero) */
+	                              /* Name of the associated file/directory (end with '\0')*/
+    uint16_t inodesContents[200];     /* si (type == T_DIR) -> lista de los inodes del directorio */
+	                              /* if (type == T_DIR) -> list of the inodes in directory */
+    uint32_t size;	              /* Tamaño actual del fichero en bytes */
+	                              /* Size in bytes */
+    uint32_t directBlock[1];          /* Número del bloque directo */
+	                              /* Number of the direct block */
+    uint32_t indirectBlock;	      /* Número del bloque indirecto */
+	                              /* Number of the indirect block */
 } TypeInodeDisk;
 
 typedef TypeInodeDisk TypeInodesDisk[NUM_INODES] ;
@@ -137,14 +140,14 @@ TypeBlockMap    b_map ;
 // es: Metadatos extra de apoyo (que no van a disco)
 // en: Extra support metadata (not to be stored on disk)
 struct {
-    int position ; // es: posición de lectura/escritura
-                   // en: read/write seek position
-    int is_open  ; // es: 0: falso, 1: verdadero
-                   // en: 0: false, 1: true
+    int32_t  position ; // es: posición de lectura/escritura
+                        // en: read/write seek position
+    int8_t   is_open  ; // es: 0: falso, 1: verdadero
+                        // en: 0: false, 1: true
 } inodes_x [NUM_INODES] ;
 
-int is_mounted = 0 ; // es: 0: falso, 1: verdadero
-                     // en: 0: false, 1: true
+int8_t is_mounted = 0 ; // es: 0: falso, 1: verdadero
+                        // en: 0: false, 1: true
 
 
 /*
@@ -274,7 +277,7 @@ int nanofs_bmap ( int inodo_id, int offset )
     // es: devolver referencia a bloque directo 
     // en: return direct block
     if (0 == bloque_logico) {
-        return inodes[inodo_id].directBlock;
+        return inodes[inodo_id].directBlock[0] ;
     }
 
     // es: devolver referencia dentro de bloque indirecto
@@ -309,7 +312,7 @@ int nanofs_meta_readFromDisk ( void )
 
     // es: leer los i-nodos a memoria
     // en: read i-nodes to memory
-    for (int i=0; i<NUM_INODES_BLOCKS; i++) 
+    for (int i=0; i<sblock.numInodesBlocks; i++) 
     {
          bread(DISK, sblock.firstInodeBlock+i, b) ;
          memmove(&(inodes[i*INODES_PER_BLOCK]), b, INODES_PER_BLOCK*sizeof(TypeInodeDisk)) ;
@@ -342,7 +345,7 @@ int nanofs_meta_writeToDisk ( void )
 
     // es: escribir los i-nodos a disco
     // en: write i-nodes to disk
-    for (int i=0; i<NUM_INODES_BLOCKS; i++) 
+    for (int i=0; i<sblock.numInodesBlocks; i++) 
     {
          memset(b, 0, BLOCK_SIZE) ;
          memmove(b, &(inodes[i*INODES_PER_BLOCK]), INODES_PER_BLOCK*sizeof(TypeInodeDisk)) ;
@@ -358,6 +361,7 @@ int nanofs_meta_setDefault ( void )
     // en: set the default values of the superblock, inode map, etc.
     sblock.numMagic          = 0x12345 ; // ayuda a comprobar que se haya creado por nuestro mkfs
     sblock.numInodes         = NUM_INODES ;
+    sblock.numInodesBlocks   = NUM_INODES_BLOCKS ;
     sblock.numInodeMapBlocks = 1 ;
     sblock.numDataMapBlocks  = 1 ;
     sblock.firstInodeBlock   = 1 ;
@@ -492,9 +496,9 @@ int nanofs_creat ( char *name )
         return b_id ;
     }
 
-    inodes[inodo_id].type = T_FILE ;
     strcpy(inodes[inodo_id].name, name) ;
-    inodes[inodo_id].directBlock = b_id ;
+    inodes[inodo_id].type           = T_FILE ;
+    inodes[inodo_id].directBlock[0] = b_id ;
     inodes_x[inodo_id].position = 0 ;
     inodes_x[inodo_id].is_open  = 1 ;
 
@@ -510,7 +514,7 @@ int nanofs_unlink ( char * name )
          return inodo_id ;
      }
 
-     nanofs_free(inodes[inodo_id].directBlock) ;
+     nanofs_free(inodes[inodo_id].directBlock[0]) ;
      memset(&(inodes[inodo_id]), 0, sizeof(TypeInodeDisk)) ;
      nanofs_ifree(inodo_id) ;
 
@@ -573,8 +577,10 @@ int main()
 
    printf("\n") ;
    printf("Size of data structures:\n") ;
-   printf(" * Size of Superblock: %ld\n", sizeof(TypeSuperblock)) ;
-   printf(" * Size of InodeDisk:  %ld\n", sizeof(TypeInodeDisk)) ;
+   printf(" * Size of Superblock: %ld bytes.\n", sizeof(TypeSuperblock)) ;
+   printf(" * Size of InodeDisk:  %ld bytes.\n", sizeof(TypeInodeDisk)) ;
+   printf(" * Size of InodeMap:   %ld bytes.\n", sizeof(TypeInodeMap)) ;
+   printf(" * Size of BlockMap:   %ld bytes.\n", sizeof(TypeBlockMap)) ;
 
    printf("\n") ;
    printf("Tests:\n") ;

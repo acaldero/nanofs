@@ -63,59 +63,95 @@ int bwrite ( char *devname, int bid, void *buffer )
  *  en: (1) Disk layout structures
  */
 
-#define NUM_INODES 10
-#define NUM_DATA_BLOCKS 20
+#define NUM_INODES         10
+#define NUM_DATA_BLOCKS    20
+#define NUM_INODES_BLOCKS  (NUM_INODES*sizeof(TipoInodoDisco)/BLOCK_SIZE)
 
+#define T_FILE       1
+#define T_DIRECTORY  2
+
+
+// Superblock
 typedef union 
 {
+
+    // union field 1
     struct {
         unsigned int numMagic;	            /* Número mágico del superbloque (por ejemplo 0x12345) */
                                             /* Superblock magic number: 0x12345 */
-        unsigned int numInodeMapBlocks;     /* Número de bloques de disco del mapa inodos */
+        unsigned int numInodeMapBlocks;     /* Número de bloques de disco del mapa inodes */
                                             /* Number of block for the inode map */
         unsigned int numDataMapBlocks;      /* Número de bloques de disco del mapa  datos */
                                             /* Number of block for the data map */
-        unsigned int numInodes; 	    /* Número de inodos en el dispositivo */
+        unsigned int numInodes; 	    /* Número de inodes en el dispositivo */
                                             /* Number of inodes in the device */
         unsigned int numDataBlocks;         /* Número de bloques de datos en el disp. */
                                             /* Number of data blocks in the device */
-        unsigned int firstInode;	    /* 1º inodo del disp. (inodo raíz) */
+        unsigned int firstInodeBlock;	    /* 1º inodo del disp. (inodo raíz) */
                                             /* Block number of the first inode (root inode) */
         unsigned int firstDataBlock;        /* 1º bloque de disco para datos tras metadatos */
                                             /* Block number of the first data block */
         unsigned int sizeDevice;	    /* Tamaño total del disp. (en bytes) */
                                             /* Total size of the device in bytes */
     } as_superblock ;
+
+    // union field 2
     char as_block[BLOCK_SIZE] ;
+
 } TipoSuperbloque ;
 
 
+// Inodes
 typedef struct {
     unsigned int type;	                  /* T_FILE o T_DIRECTORY */
 	                                  /* T_FILE or T_DIRECTORY */
-    char nombre[200];	                  /* Nombre del fichero/ directorio asociado */
+    char name[200];	                  /* Nombre del fichero/ directorio asociado */
 	                                  /* Name of the associated file/directory */
-    unsigned int inodesContents[200];     /* si (tipo==dir) -> lista de los inodos del directorio */
+    unsigned int inodesContents[200];     /* si (tipo==dir) -> lista de los inodes del directorio */
 	                                  /* if (type==dir) -> list of the inodes in directory */
     unsigned int size;	                  /* Tamaño actual del fichero en bytes */
 	                                  /* Size in bytes */
-    unsigned int bloqueDirecto;	          /* Número del bloque directo */
+    unsigned int directBlock;	          /* Número del bloque directo */
 	                                  /* Number of the direct block */
-    unsigned int bloqueIndirecto;	  /* Número del bloque indirecto */
+    unsigned int indirectBlock;	          /* Número del bloque indirecto */
 	                                  /* Number of the indirect block */
-    char padding[BLOCK_SIZE-204*sizeof(int)-200]; /* Campo relleno para llenar un bloque */
-	                                          /* Padding (to fit in a block) */
 } TipoInodoDisco;
 
+typedef union {
 
-typedef char  inode_map[NUM_INODES] ;          /* 100…0 (usado: i_map[x]=1 | libre: i_map[x]=0) */
-                                              /* 100…0 (used: i_map[x]=1 | free: i_map[x]=0) */
+    // union field 1
+    TipoInodoDisco as_inodes[NUM_INODES] ;
 
-typedef char block_map[NUM_DATA_BLOCKS] ;    /* 000…0 (usado: b_map[x]=1 | libre: b_map[x]=0) */
-                                              /* 000…0 (used: b_map[x]=1 | free: b_map[x]=0) */
+    // union field 2
+    char as_block[NUM_INODES_BLOCKS][BLOCK_SIZE] ;
 
-#define T_FILE      1
-#define T_DIRECTORY 2
+} TipoInodosDisco;
+
+
+// inode map
+typedef union {
+
+    // union field 1
+    char as_map[NUM_INODES] ;  /* 100…0 (usado: i_map[x]=1 | libre: i_map[x]=0) */
+                               /* 100…0 (used:  i_map[x]=1 | free:  i_map[x]=0) */
+
+    // union field 2
+    char as_block[1][BLOCK_SIZE] ;
+
+} TipoInodeMap ;
+
+
+// data block map
+typedef union {
+
+    // union field 1
+    char as_map[NUM_DATA_BLOCKS] ;  /* 000…0 (usado: b_map.as_map[x]=1 | libre: b_map.as_map[x]=0) */
+                                    /* 000…0 (used:  b_map.as_map[x]=1 | free:  b_map.as_map[x]=0) */
+
+    // union field 2
+    char as_block[1][BLOCK_SIZE] ;
+
+} TipoBlockMap ;
 
 
 /*
@@ -126,9 +162,9 @@ typedef char block_map[NUM_DATA_BLOCKS] ;    /* 000…0 (usado: b_map[x]=1 | lib
 // es: Metadatos leídos desde disco
 // en: Metadata from disk
 TipoSuperbloque sbloque ;
-           char i_map[BLOCK_SIZE] ;
-           char b_map[BLOCK_SIZE] ;
- TipoInodoDisco inodos[NUM_INODES] ;
+TipoInodosDisco inodes ;
+TipoInodeMap    i_map ;
+TipoBlockMap    b_map ;
 
 // es: Metadatos extra de apoyo (que no van a disco)
 // en: Extra support metadata (not to be stored on disk)
@@ -137,7 +173,7 @@ struct {
                    // en: read/write seek position
     int is_open  ; // es: 0: falso, 1: verdadero
                    // en: 0: false, 1: true
-} inodos_x [NUM_INODES] ;
+} inodes_x [NUM_INODES] ;
 
 int is_mounted = 0 ; // es: 0: falso, 1: verdadero
                      // en: 0: false, 1: true
@@ -155,19 +191,19 @@ int nanofs_ialloc ( void )
     // en: search for a free i-node
     for (i=0; i<sbloque.as_superblock.numInodes; i++)
     {
-          if (i_map[i] == 0)
+          if (i_map.as_map[i] == 0)
           {
               // es: inodo ocupado ahora
               // en: set inode to used
-              i_map[i] = 1;
+              i_map.as_map[i] = 1 ;
 
               // es: valores por defecto en el i-nodo
               // en: set default values for the inode
-              memset(&(inodos[i]),0, sizeof(TipoInodoDisco));
+              memset(&(inodes.as_inodes[i]), 0, sizeof(TipoInodoDisco)) ;
 
               // es: devolver identificador de i-nodo
               // en: return the inode id.
-              return i;
+              return i ;
           }
     }
 
@@ -183,20 +219,20 @@ int nanofs_alloc ( void )
     // en: search for a free data block
     for (i=0; i<sbloque.as_superblock.numDataBlocks; i++)
     {
-          if (b_map[i] == 0)
+          if (b_map.as_map[i] == 0)
           {
               // es: bloque ocupado ahora
               // en: data block used now
-              b_map[i] = 1;
+              b_map.as_map[i] = 1 ;
 
               // es: valores por defecto en el bloque
               // en: default values for the block
-              memset(b, 0, BLOCK_SIZE);
-              bwrite(DISK, sbloque.as_superblock.firstDataBlock + i, b);
+              memset(b, 0, BLOCK_SIZE) ;
+              bwrite(DISK, sbloque.as_superblock.firstDataBlock + i, b) ;
 
               // es: devolver identificador del bloque
               // en: return the block id.
-              return i;
+              return i ;
           }
     }
 
@@ -213,7 +249,7 @@ int nanofs_ifree ( int inodo_id )
 
     // es: liberar i-nodo
     // en: free i-node
-    i_map[inodo_id] = 0;
+    i_map.as_map[inodo_id] = 0;
 
     return -1;
 }
@@ -228,7 +264,7 @@ int nanofs_free ( int block_id )
 
     // es: liberar bloque
     // en: free block
-    b_map[block_id] = 0;
+    b_map.as_map[block_id] = 0;
 
     return -1;
 }
@@ -237,11 +273,11 @@ int nanofs_namei ( char *fname )
 {
    int i;
 
-   // es: buscar i-nodo con nombre <fname>
+   // es: buscar i-nodo con name <fname>
    // en: search an i-node with name <fname>
    for (i=0; i<sbloque.as_superblock.numInodes; i++)
    {
-         if (! strcmp(inodos[i].nombre, fname)) {
+         if (! strcmp(inodes.as_inodes[i].name, fname)) {
                return i;
          }
    }
@@ -270,12 +306,12 @@ int nanofs_bmap ( int inodo_id, int offset )
     // es: devolver referencia a bloque directo 
     // en: return direct block
     if (0 == bloque_logico) {
-        return inodos[inodo_id].bloqueDirecto;
+        return inodes.as_inodes[inodo_id].directBlock;
     }
 
     // es: devolver referencia dentro de bloque indirecto
     // en: return indirect block
-    bread(DISK, sbloque.as_superblock.firstDataBlock + inodos[inodo_id].bloqueIndirecto, b);
+    bread(DISK, sbloque.as_superblock.firstDataBlock + inodes.as_inodes[inodo_id].indirectBlock, b);
     return b[bloque_logico - 1] ;
 }
 
@@ -293,19 +329,19 @@ int nanofs_meta_readFromDisk ( void )
     // es: leer los bloques para el mapa de i-nodos
     // en: read the blocks where the i-node map is stored
     for (int i=0; i<sbloque.as_superblock.numInodeMapBlocks; i++) {
-           bread(DISK, 2+i, ((char *)i_map + i*BLOCK_SIZE)) ;
+         bread(DISK, 1+i, ((char *)(i_map.as_block[i]))) ;
     }
 
     // es: leer los bloques para el mapa de bloques de datos
     // en: read the blocks where the block map is stored
     for (int i=0; i<sbloque.as_superblock.numDataMapBlocks; i++) {
-          bread(DISK, 2+i+sbloque.as_superblock.numInodeMapBlocks, ((char *)b_map + i*BLOCK_SIZE));
+         bread(DISK, 2+sbloque.as_superblock.numInodeMapBlocks+i, ((char *)(b_map.as_block[i]))) ;
     }
 
     // es: leer los i-nodos a memoria
     // en: read i-nodes to memory
-    for (int i=0; i<(sbloque.as_superblock.numInodes*sizeof(TipoInodoDisco)/BLOCK_SIZE); i++) {
-          bread(DISK, i+sbloque.as_superblock.firstInode, ((char *)inodos + i*BLOCK_SIZE));
+    for (int i=0; i<NUM_INODES_BLOCKS; i++) {
+         bread(DISK, sbloque.as_superblock.firstInodeBlock+i, ((char *)inodes.as_block[i]));
     }
 
     return 1;
@@ -320,19 +356,19 @@ int nanofs_meta_writeToDisk ( void )
     // es: escribir los bloques para el mapa de i-nodos
     // en: write the blocks where the i-node map is stored
     for (int i=0; i<sbloque.as_superblock.numInodeMapBlocks; i++) {
-           bwrite(DISK, 2+i, ((char *)i_map + i*BLOCK_SIZE)) ;
+         bwrite(DISK, 1+i, ((char *)(i_map.as_block[i]))) ;
     }
 
     // es: escribir los bloques para el mapa de bloques de datos
     // en: write the blocks where the block map is stored
     for (int i=0; i<sbloque.as_superblock.numDataMapBlocks; i++) {
-          bwrite(DISK, 2+i+sbloque.as_superblock.numInodeMapBlocks, ((char *)b_map + i*BLOCK_SIZE)) ;
+         bwrite(DISK, 2+sbloque.as_superblock.numInodeMapBlocks+i, ((char *)(b_map.as_block[i]))) ;
     }
 
     // es: escribir los i-nodos a disco
     // en: write i-nodes to disk
-    for (int i=0; i<(sbloque.as_superblock.numInodes*sizeof(TipoInodoDisco)/BLOCK_SIZE); i++) {
-          bwrite(DISK, i+sbloque.as_superblock.firstInode, ((char *)inodos + i*BLOCK_SIZE)) ;
+    for (int i=0; i<NUM_INODES_BLOCKS; i++) {
+         bwrite(DISK, sbloque.as_superblock.firstInodeBlock+i, ((char *)inodes.as_block[i]));
     }
 
     return 1 ;
@@ -342,25 +378,25 @@ int nanofs_meta_setDefault ( void )
 {
     // es: inicializar a los valores por defecto del superbloque, mapas e i-nodos
     // en: set the default values of the superblock, inode map, etc.
-    sbloque.as_superblock.numMagic             = 0x12345; // ayuda a comprobar que se haya creado por nuestro mkfs
-    sbloque.as_superblock.numInodes            = NUM_INODES;
-    sbloque.as_superblock.numInodeMapBlocks    = 1;
-    sbloque.as_superblock.numDataMapBlocks     = 1;
-    sbloque.as_superblock.firstInode           = 1;
-    sbloque.as_superblock.numDataBlocks        = NUM_DATA_BLOCKS;
-    sbloque.as_superblock.firstDataBlock       = 12;
-    sbloque.as_superblock.sizeDevice           = 20;
+    sbloque.as_superblock.numMagic          = 0x12345 ; // ayuda a comprobar que se haya creado por nuestro mkfs
+    sbloque.as_superblock.numInodes         = NUM_INODES ;
+    sbloque.as_superblock.numInodeMapBlocks = 1 ;
+    sbloque.as_superblock.numDataMapBlocks  = 1 ;
+    sbloque.as_superblock.firstInodeBlock   = 1 ;
+    sbloque.as_superblock.numDataBlocks     = NUM_DATA_BLOCKS ;
+    sbloque.as_superblock.firstDataBlock    = 12 ;
+    sbloque.as_superblock.sizeDevice        = 20 ;
 
     for (int i=0; i<sbloque.as_superblock.numInodes; i++) {
-         i_map[i] = 0; // free
+         i_map.as_map[i] = 0; // free
     }
 
     for (int i=0; i<sbloque.as_superblock.numDataBlocks; i++) {
-         b_map[i] = 0; // free
+         b_map.as_map[i] = 0; // free
     }
 
     for (int i=0; i<sbloque.as_superblock.numInodes; i++) {
-         memset(&(inodos[i]), 0, sizeof(TipoInodoDisco) );
+         memset(&(inodes.as_inodes[i]), 0, sizeof(TipoInodoDisco) );
     }
 
     return 1;
@@ -394,7 +430,7 @@ int nanofs_umount ( void )
     // es: si algún fichero está abierto -> error
     // en: if any file is open -> error
     for (int i=0; i<sbloque.as_superblock.numInodes; i++) {
-    if (1 == inodos_x[i].is_open)
+    if (1 == inodes_x[i].is_open)
         return -1 ;
     }
 
@@ -436,17 +472,17 @@ int nanofs_mkfs ( void )
  *
  */
 
-int nanofs_open ( char *nombre )
+int nanofs_open ( char *name )
 {
     int inodo_id ;
 
-    inodo_id = nanofs_namei(nombre) ;
+    inodo_id = nanofs_namei(name) ;
     if (inodo_id < 0) {
         return inodo_id ;
     }
 
-    inodos_x[inodo_id].position = 0 ;
-    inodos_x[inodo_id].is_open  = 1 ;
+    inodes_x[inodo_id].position = 0 ;
+    inodes_x[inodo_id].is_open  = 1 ;
 
     return inodo_id ;
 }
@@ -457,13 +493,13 @@ int nanofs_close ( int fd )
          return fd ;
      }
 
-     inodos_x[fd].position = 0 ;
-     inodos_x[fd].is_open  = 0 ;
+     inodes_x[fd].position = 0 ;
+     inodes_x[fd].is_open  = 0 ;
 
      return 1 ;
 }
 
-int nanofs_creat ( char *nombre )
+int nanofs_creat ( char *name )
 {
     int b_id, inodo_id ;
 
@@ -478,26 +514,26 @@ int nanofs_creat ( char *nombre )
         return b_id ;
     }
 
-    inodos[inodo_id].type          = T_FILE ;
-    strcpy(inodos[inodo_id].nombre, nombre) ;
-    inodos[inodo_id].bloqueDirecto = b_id ;
-    inodos_x[inodo_id].position    = 0 ;
-    inodos_x[inodo_id].is_open     = 1 ;
+    inodes.as_inodes[inodo_id].type = T_FILE ;
+    strcpy(inodes.as_inodes[inodo_id].name, name) ;
+    inodes.as_inodes[inodo_id].directBlock = b_id ;
+    inodes_x[inodo_id].position = 0 ;
+    inodes_x[inodo_id].is_open  = 1 ;
 
     return inodo_id ;
 }
 
-int nanofs_unlink ( char * nombre )
+int nanofs_unlink ( char * name )
 {
      int inodo_id ;
 
-     inodo_id = nanofs_namei(nombre) ;
+     inodo_id = nanofs_namei(name) ;
      if (inodo_id < 0) {
          return inodo_id ;
      }
 
-     nanofs_free(inodos[inodo_id].bloqueDirecto) ;
-     memset(&(inodos[inodo_id]), 0, sizeof(TipoInodoDisco)) ;
+     nanofs_free(inodes.as_inodes[inodo_id].directBlock) ;
+     memset(&(inodes.as_inodes[inodo_id]), 0, sizeof(TipoInodoDisco)) ;
      nanofs_ifree(inodo_id) ;
 
     return 1 ;
@@ -508,17 +544,17 @@ int nanofs_read ( int fd, char *buffer, int size )
      char b[BLOCK_SIZE] ;
      int b_id ;
 
-     if (inodos_x[fd].position+size > inodos[fd].size) {
-         size = inodos[fd].size - inodos_x[fd].position ;
+     if (inodes_x[fd].position+size > inodes.as_inodes[fd].size) {
+         size = inodes.as_inodes[fd].size - inodes_x[fd].position ;
      }
      if (size <= 0) {
          return 0 ;
      }
 
-     b_id = nanofs_bmap(fd, inodos_x[fd].position) ;
+     b_id = nanofs_bmap(fd, inodes_x[fd].position) ;
      bread(DISK, sbloque.as_superblock.firstDataBlock+b_id, b) ;
-     memmove(buffer, b+inodos_x[fd].position, size) ;
-     inodos_x[fd].position += size ;
+     memmove(buffer, b+inodes_x[fd].position, size) ;
+     inodes_x[fd].position += size ;
 
      return size ;
 }
@@ -528,19 +564,19 @@ int nanofs_write ( int fd, char *buffer, int size )
      char b[BLOCK_SIZE] ;
      int b_id ;
 
-     if (inodos_x[fd].position+size > BLOCK_SIZE) {
-         size = BLOCK_SIZE - inodos_x[fd].position ;
+     if (inodes_x[fd].position+size > BLOCK_SIZE) {
+         size = BLOCK_SIZE - inodes_x[fd].position ;
      }
      if (size <= 0) {
          return 0 ;
      }
 
-     b_id = nanofs_bmap(fd, inodos_x[fd].position) ;
+     b_id = nanofs_bmap(fd, inodes_x[fd].position) ;
      bread(DISK, sbloque.as_superblock.firstDataBlock+b_id, b) ;
-     memmove(b+inodos_x[fd].position, buffer, size) ;
+     memmove(b+inodes_x[fd].position, buffer, size) ;
      bwrite(DISK, sbloque.as_superblock.firstDataBlock+b_id, b) ;
-     inodos_x[fd].position += size ;
-       inodos[fd].size     += size ;
+     inodes_x[fd].position     += size ;
+     inodes.as_inodes[fd].size += size ;
 
      return size ;
 }

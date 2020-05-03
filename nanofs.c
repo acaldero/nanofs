@@ -382,6 +382,12 @@ int nanofs_mount ( void )
     // en: read the metadata file system from disk
     nanofs_meta_readFromDisk() ;
 
+    // es: comprueba el número mágico
+    // en: check magic number
+    if (0x12345 != sblock.numMagic) {
+        return -1 ;
+    }
+
     // es: montar
     // en: mounted
     is_mounted = 1 ; // 0: falso, 1: verdadero
@@ -446,6 +452,8 @@ int nanofs_open ( char *name )
 {
     int inodo_id ;
 
+    // es: obtener inodo a partir del nombre
+    // en: get inode id from name
     inodo_id = nanofs_namei(name) ;
     if (inodo_id < 0) {
         return inodo_id ;
@@ -459,8 +467,11 @@ int nanofs_open ( char *name )
 
 int nanofs_close ( int fd )
 {
-     if (fd < 0) {
-         return fd ;
+     // es: comprobar parámetros
+     // en: check params
+     if ( (fd < 0) || (fd >= sblock.numInodes) )
+     {
+         return -1 ;
      }
 
      inodes_x[fd].position = 0 ;
@@ -497,6 +508,8 @@ int nanofs_unlink ( char * name )
 {
      int inodo_id ;
 
+     // es: obtener inodo a partir del nombre
+     // en: get inode id from name
      inodo_id = nanofs_namei(name) ;
      if (inodo_id < 0) {
          return inodo_id ;
@@ -514,6 +527,15 @@ int nanofs_read ( int fd, char *buffer, int size )
      char b[BLOCK_SIZE] ;
      int b_id ;
 
+     // es: comprobar parámetros
+     // en: check params
+     if ( (fd < 0) || (fd >= sblock.numInodes) )
+     {
+         return -1 ;
+     }
+
+     // es: reajusta el tamaño
+     // en: ajust size
      if (inodes_x[fd].position+size > inodes[fd].size) {
          size = inodes[fd].size - inodes_x[fd].position ;
      }
@@ -521,9 +543,18 @@ int nanofs_read ( int fd, char *buffer, int size )
          return 0 ;
      }
 
+     // es: obtener bloque
+     // en: get block
      b_id = nanofs_bmap(fd, inodes_x[fd].position) ;
+     if (b_id < 0) {
+         return -1 ;
+     }
+
+     // es: lee bloque + toma porción pedida por el usuario
+     // en: read block + get portion requested by user
      bread(DISK, sblock.firstDataBlock+b_id, b) ;
      memmove(buffer, b+inodes_x[fd].position, size) ;
+
      inodes_x[fd].position += size ;
 
      return size ;
@@ -534,6 +565,13 @@ int nanofs_write ( int fd, char *buffer, int size )
      char b[BLOCK_SIZE] ;
      int b_id ;
 
+     // es: comprobar parámetros
+     // en: check params
+     if ( (fd < 0) || (fd >= sblock.numInodes) )
+     {
+         return -1 ;
+     }
+
      if (inodes_x[fd].position+size > BLOCK_SIZE) {
          size = BLOCK_SIZE - inodes_x[fd].position ;
      }
@@ -541,10 +579,19 @@ int nanofs_write ( int fd, char *buffer, int size )
          return 0 ;
      }
 
+     // es: obtener bloque
+     // en: get block
      b_id = nanofs_bmap(fd, inodes_x[fd].position) ;
+     if (b_id < 0) {
+         return -1 ;
+     }
+
+     // es: lee bloque + actualiza algunos bytes + escribe bloque
+     // en: read block + modify some bytes + write block
      bread(DISK, sblock.firstDataBlock+b_id, b) ;
      memmove(b+inodes_x[fd].position, buffer, size) ;
      bwrite(DISK, sblock.firstDataBlock+b_id, b) ;
+
      inodes_x[fd].position += size ;
      inodes[fd].size       += size ;
 

@@ -482,22 +482,23 @@ int nanofs_close ( int fd )
 
 int nanofs_creat ( char *name )
 {
-    int b_id, inodo_id ;
+    int inodo_id ;
+
+    // es: comprueba si existe el fichero
+    // en: check file exist
+    inodo_id = nanofs_namei(name) ;
+    if (inodo_id >= 0) {
+        return -1 ;
+    }
 
     inodo_id = nanofs_ialloc() ;
     if (inodo_id < 0) {
         return inodo_id ;
     }
 
-    b_id = nanofs_alloc() ;
-    if (b_id < 0) {
-        nanofs_ifree(inodo_id) ;
-        return b_id ;
-    }
-
     strcpy(inodes[inodo_id].name, name) ;
     inodes[inodo_id].type           = T_FILE ;
-    inodes[inodo_id].directBlock[0] = b_id ;
+    inodes[inodo_id].directBlock[0] = 255 ;
     inodes_x[inodo_id].position = 0 ;
     inodes_x[inodo_id].is_open  = 1 ;
 
@@ -582,8 +583,12 @@ int nanofs_write ( int fd, char *buffer, int size )
      // es: obtener bloque
      // en: get block
      b_id = nanofs_bmap(fd, inodes_x[fd].position) ;
-     if (b_id < 0) {
-         return -1 ;
+     if (255 == b_id) {
+         b_id = nanofs_alloc() ;
+         if (b_id < 0) {
+             return -1 ;
+         }
+         inodes[fd].directBlock[0] = b_id ;
      }
 
      // es: lee bloque + actualiza algunos bytes + escribe bloque

@@ -1,18 +1,20 @@
 
 all: createdisk compile run
-	@echo "Done."
 
 createdisk:
 	@echo "Creating disk..."
 	dd if=/dev/zero of=tmpfile.dat bs=1024 count=32
+	@echo ""
 
 compile:
 	@echo "Compiling..."
 	gcc -o nanofs -Wall -g nanofs.c
+	@echo ""
 
 run:
 	@echo "Running..."
 	./nanofs
+	@echo ""
 
 view:
 	@echo "Exploring raw tmpfile.dat as char array..."

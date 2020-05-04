@@ -94,18 +94,18 @@ typedef struct {
 
 // Inodes
 typedef struct {
-    uint32_t type;	              /* T_FILE o T_DIRECTORY */
-	                              /* T_FILE or T_DIRECTORY */
-    char name[50+1];	              /* Nombre del fichero/directorio asociado (termina en cero) */
-	                              /* Name of the associated file/directory (end with '\0')*/
-    uint16_t inodesContents[80];      /* si (type == T_DIR) -> lista de los inodes del directorio */
-	                              /* if (type == T_DIR) -> list of the inodes in directory */
-    uint32_t size;	              /* Tamaño actual del fichero en bytes */
-	                              /* Size in bytes */
-    uint16_t directBlock[1];          /* Número del bloque directo */
-	                              /* Number of the direct block */
-    uint16_t indirectBlock;	      /* Número del bloque indirecto */
-	                              /* Number of the indirect block */
+    uint32_t type;	               /* T_FILE o T_DIRECTORY */
+	                               /* T_FILE or T_DIRECTORY */
+    char name[50+1];	               /* Nombre del fichero/directorio asociado (termina en cero) */
+	                               /* Name of the associated file/directory (end with '\0')*/
+    uint16_t inodesInDir[NUM_INODES];  /* si (type == T_DIR) -> lista de los inodes del directorio */
+	                               /* if (type == T_DIR) -> list of the inodes in directory */
+    uint32_t size;	               /* Tamaño actual del fichero en bytes */
+	                               /* Size in bytes */
+    uint16_t directBlock[1];           /* Número del bloque directo */
+	                               /* Number of the direct block */
+    uint16_t indirectBlock;	       /* Número del bloque indirecto */
+	                               /* Number of the indirect block */
 } TypeInodeDisk;
 
 typedef TypeInodeDisk TypeInodesDisk[NUM_INODES] ;
@@ -608,26 +608,13 @@ int nanofs_write ( int fd, char *buffer, int size )
  *
  */
 
-int main()
+int debug_test_mkfs_mount_umount ()
 {
-   int   ret = 1 ;
-   int   fd  = 1 ;
-   char *str1 = "hola mundo..." ;
-   char  str2[20] ;
+   int  ret = 1 ;
 
    printf("\n") ;
-   printf("Size of data structures:\n") ;
-   printf(" * Size of Superblock: %ld bytes.\n", sizeof(TypeSuperblock)) ;
-   printf(" * Size of InodeDisk:  %ld bytes.\n", sizeof(TypeInodeDisk)) ;
-   printf(" * Size of InodeMap:   %ld bytes.\n", sizeof(TypeInodeMap)) ;
-   printf(" * Size of BlockMap:   %ld bytes.\n", sizeof(TypeBlockMap)) ;
+   printf("Tests: mkfs + mount + umount\n") ;
 
-   printf("\n") ;
-   printf("Tests:\n") ;
-
-   //
-   // mkfs-mount
-   //
    if (ret != -1)
    {
        printf(" * nanofs_mkfs(32) -> ") ;
@@ -642,9 +629,31 @@ int main()
        printf("%d\n", ret) ;
    }
 
-   //
-   // creat-write-close
-   //
+   if (ret != -1)
+   {
+       printf(" * nanofs_umount() -> ") ;
+       ret = nanofs_umount() ;
+       printf("%d\n", ret) ;
+   }
+
+   return 0 ;
+}
+
+int debug_test_mount_creat_write_close_umount ()
+{
+   int  ret = 1 ;
+   int  fd  = 1 ;
+
+   printf("\n") ;
+   printf("Tests: mount + creat + write + close + umount\n") ;
+
+   if (ret != -1)
+   {
+       printf(" * nanofs_mount() -> ") ;
+       ret = nanofs_mount() ;
+       printf("%d\n", ret) ;
+   }
+
    if (ret != -1)
    {
        printf(" * nanofs_creat('test1.txt') -> ") ;
@@ -654,6 +663,8 @@ int main()
 
    if (ret != -1)
    {
+       char *str1 = "hola mundo..." ;
+
        printf(" * nanofs_write(%d,'%s',%ld) -> ", ret, str1, strlen(str1)) ;
        ret = nanofs_write(fd, str1, strlen(str1)) ;
        printf("%d\n", ret) ;
@@ -661,14 +672,37 @@ int main()
 
    if (ret != -1)
    {
-       printf(" * nanofs_close(%d) -> ", ret) ;
+       printf(" * nanofs_close(%d) -> ", fd) ;
        ret = nanofs_close(fd) ;
        printf("%d\n", ret) ;
    }
 
-   //
-   // open-read-close
-   //
+   if (ret != -1)
+   {
+       printf(" * nanofs_umount() -> ") ;
+       ret = nanofs_umount() ;
+       printf("%d\n", ret) ;
+   }
+
+   return 0 ;
+}
+
+int debug_test_mount_open_read_close_unlink_umount ()
+{
+   int   ret = 1 ;
+   int   fd  = 1 ;
+   char  str2[20] ;
+
+   printf("\n") ;
+   printf("Tests: mount + open + read + close + unlink + umount\n") ;
+
+   if (ret != -1)
+   {
+       printf(" * nanofs_mount() -> ") ;
+       ret = nanofs_mount() ;
+       printf("%d\n", ret) ;
+   }
+
    if (ret != -1)
    {
        printf(" * nanofs_open('test1.txt') -> ") ;
@@ -679,6 +713,7 @@ int main()
    if (ret != -1)
    {
        memset(str2, 0, 20) ;
+
        printf(" * nanofs_read(%d,'%s',%d) -> ", ret, str2, 13) ;
        ret = nanofs_read(fd, str2, 13) ;
        printf("%d (%s)\n", ret, str2) ;
@@ -686,14 +721,11 @@ int main()
 
    if (ret != -1)
    {
-       printf(" * nanofs_close(%d) -> ", ret) ;
+       printf(" * nanofs_close(%d) -> ", fd) ;
        ret = nanofs_close(fd) ;
        printf("%d\n", ret) ;
    }
 
-   //
-   // unlink-umount
-   //
    if (ret != -1)
    {
        printf(" * nanofs_unlink('test1.txt') -> ") ;
@@ -707,6 +739,47 @@ int main()
        ret = nanofs_umount() ;
        printf("%d\n", ret) ;
    }
+
+   return 0 ;
+}
+
+int debug_print_sizeof ( )
+{
+   printf("\n") ;
+   printf("Size of data structures:\n") ;
+   printf(" * Size of Superblock: %ld bytes.\n", sizeof(TypeSuperblock)) ;
+   printf(" * Size of InodeDisk:  %ld bytes.\n", sizeof(TypeInodeDisk)) ;
+   printf(" * Size of InodeMap:   %ld bytes.\n", sizeof(TypeInodeMap)) ;
+   printf(" * Size of BlockMap:   %ld bytes.\n", sizeof(TypeBlockMap)) ;
+
+   return 1 ;
+}
+
+int debug_print_superblock ( )
+{
+   printf("\n") ;
+   printf("SuperBlock:\n") ;
+   printf(" * numMagic:\t\t0x%x\n",      sblock.numMagic) ;
+   printf(" * numInodes:\t\t%d\n",       sblock.numInodes) ;
+   printf(" * numInodesBlocks:\t%d\n",   sblock.numInodesBlocks) ;
+   printf(" * numDataBlocks:\t%d\n",     sblock.numDataBlocks) ;
+   printf(" * firstMapsBlock:\t%d\n",    sblock.firstMapsBlock) ;
+   printf(" * firstInodeBlock:\t%d\n",   sblock.firstInodeBlock) ;
+   printf(" * firstDataBlock:\t%d\n",    sblock.firstDataBlock) ;
+   printf(" * sizeDevice:\t\t%d\n",      sblock.sizeDevice) ;
+
+   return 1 ;
+}
+
+
+int main()
+{
+   debug_test_mkfs_mount_umount() ;
+   debug_test_mount_creat_write_close_umount() ;
+   debug_test_mount_open_read_close_unlink_umount() ;
+
+   debug_print_sizeof() ;
+   debug_print_superblock() ;
 
    return 0 ;
 }

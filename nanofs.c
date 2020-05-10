@@ -31,7 +31,7 @@
  *  en: Block Disk Interface
  */
 
-#define DISK "tmpfile.dat"
+#define DISK "disk.dat"
 #define BLOCK_SIZE 1024
 
 int bread ( char *devname, int bid, void *buffer )
@@ -39,11 +39,24 @@ int bread ( char *devname, int bid, void *buffer )
    FILE *fd1 ;
    int ret ;
 
-   fd1 = fopen(devname, "r") ;
-   fseek(fd1, bid*BLOCK_SIZE, SEEK_SET) ;
-   ret = fread(buffer, BLOCK_SIZE, 1, fd1) ;
-   fclose(fd1) ;
-   return ret ;
+   // 1) es: abre el dispositivo de disco "devname"
+   // 1) en: open "devname" disk
+      fd1 = fopen(devname, "r") ;
+      if (NULL == fd1) {
+          return -1 ;
+      }
+
+   // 2) es: salta al bloque bid y lo lee. Identificador de bloque empieza en cero.
+   // 2) en: seek to the bid-th block and read it. Read operation starts at 0
+      ret = fseek(fd1, bid*BLOCK_SIZE, SEEK_SET) ;
+      if (0 == ret) { 
+          ret = fread(buffer, BLOCK_SIZE, 1, fd1) ;
+          fclose(fd1) ;
+      }
+
+   // 3) es: devuelve ok
+   // 3) en: return ok
+      return ret ;
 }
 
 int bwrite ( char *devname, int bid, void *buffer )
@@ -51,11 +64,29 @@ int bwrite ( char *devname, int bid, void *buffer )
    FILE *fd1 ;
    int ret ;
 
-   fd1 = fopen(devname, "r+") ;
-   fseek(fd1, bid*BLOCK_SIZE, SEEK_SET) ;
-   ret = fwrite(buffer, BLOCK_SIZE, 1, fd1) ;
-   fclose(fd1) ;
-   return ret ;
+   // 1) es: abre el dispositivo de disco "devname"
+   // 1) en: open "devname" disk
+      fd1 = fopen(devname, "r+") ;
+      if (NULL == fd1) {
+          return -1 ;
+      }
+
+   // 2) es: salta al bloque bid y lo escribe. Identificador de bloque empieza en cero.
+   // 2) en: seek to the bid-th block and write it. Write operation starts at 0
+      ret = fseek(fd1, bid*BLOCK_SIZE, SEEK_SET) ;
+      if (0 == ret) { 
+          ret = fwrite(buffer, BLOCK_SIZE, 1, fd1) ;
+          fclose(fd1) ;
+      }
+
+   // 3) es: devuelve ok
+   // 3) en: return ok
+      return ret ;
+}
+
+int min_value ( int a, int b )
+{
+    return (a < b) ? a : b ;
 }
 
 
@@ -77,6 +108,8 @@ typedef struct {
                                   /* Superblock magic number: 0x12345 */
     uint32_t numInodes; 	  /* Número de inodes en el dispositivo */
                                   /* Number of inodes in the device */
+    uint32_t inodesPerBlock;      /* Número de inodos por bloque */
+                                  /* Number of inodos per blocks */
     uint32_t numInodesBlocks;     /* Número de bloques de inodos en el disp. */
                                   /* Number of inodos blocks in the device */
     uint32_t numDataBlocks;       /* Número de bloques de datos en el disp. */
@@ -304,11 +337,17 @@ int nanofs_meta_readFromDisk ( void )
 
     // es: leer los i-nodos a memoria
     // en: read i-nodes to memory
-    int INODES_PER_BLOCK = BLOCK_SIZE / sizeof(TypeInodeDisk) ;
-    for (int i=0; i<sblock.numInodesBlocks; i++) 
+    int inodesRead       = 0 ;
+    int inodesLeftToRead = sblock.numInodes ;
+    int inodesToPack     = min_value(inodesLeftToRead, sblock.inodesPerBlock) ;
+    for (int blocksRead=0; inodesLeftToRead > 0; blocksRead++)
     {
-         bread(DISK, sblock.firstInodeBlock+i, b) ;
-         memmove(&(inodes[i*INODES_PER_BLOCK]), b, INODES_PER_BLOCK*sizeof(TypeInodeDisk)) ;
+         bread(DISK, sblock.firstInodeBlock+blocksRead, b) ;
+         memmove(&(inodes[inodesRead]), b, inodesToPack*sizeof(TypeInodeDisk)) ;
+
+         inodesRead       += inodesToPack ;
+         inodesLeftToRead -= inodesToPack ;
+         inodesToPack      = min_value(inodesLeftToRead, sblock.inodesPerBlock) ;
     }
 
     return 1;
@@ -333,12 +372,18 @@ int nanofs_meta_writeToDisk ( void )
 
     // es: escribir los i-nodos a disco
     // en: write i-nodes to disk
-    int INODES_PER_BLOCK = BLOCK_SIZE / sizeof(TypeInodeDisk) ;
-    for (int i=0; i<sblock.numInodesBlocks; i++) 
+    int inodesWritten     = 0 ;
+    int inodesLeftToWrite = sblock.numInodes ;
+    int inodesToPack      = min_value(inodesLeftToWrite, sblock.inodesPerBlock) ;
+    for (int blocksWritten=0; inodesLeftToWrite > 0; blocksWritten++)
     {
           memset(b, 0, BLOCK_SIZE) ;
-         memmove(b, &(inodes[i*INODES_PER_BLOCK]), INODES_PER_BLOCK*sizeof(TypeInodeDisk)) ;
-         bwrite(DISK, sblock.firstInodeBlock+i, b) ;
+         memmove(b, &(inodes[inodesWritten]), inodesToPack*sizeof(TypeInodeDisk)) ;
+         bwrite(DISK, sblock.firstInodeBlock+blocksWritten, b) ;
+
+         inodesWritten     += inodesToPack ;
+         inodesLeftToWrite -= inodesToPack ;
+         inodesToPack       = min_value(inodesLeftToWrite, sblock.inodesPerBlock) ;
     }
 
     return 1 ;
@@ -350,7 +395,8 @@ int nanofs_meta_setDefault ( int dev_size )
     // en: set the default values of the superblock, inode map, etc.
     sblock.numMagic          = 0x12345 ; // ayuda a comprobar que se haya creado por nuestro mkfs
     sblock.numInodes         = NUM_INODES ;
-    sblock.numInodesBlocks   = NUM_INODES*sizeof(TypeInodeDisk)/BLOCK_SIZE ;
+    sblock.numInodesBlocks   = (NUM_INODES * sizeof(TypeInodeDisk) + BLOCK_SIZE - 1) / BLOCK_SIZE ;
+    sblock.inodesPerBlock    = BLOCK_SIZE / sizeof(TypeInodeDisk) ;
     sblock.numDataBlocks     = NUM_DATA_BLOCKS ;
     sblock.firstMapsBlock    = 1 ;
     sblock.firstInodeBlock   = 2 ;
@@ -762,6 +808,7 @@ int debug_print_superblock ( )
    printf(" * numMagic:\t\t0x%x\n",      sblock.numMagic) ;
    printf(" * numInodes:\t\t%d\n",       sblock.numInodes) ;
    printf(" * numInodesBlocks:\t%d\n",   sblock.numInodesBlocks) ;
+   printf(" * inodesPerBlock:\t%d\n",    sblock.inodesPerBlock) ;
    printf(" * numDataBlocks:\t%d\n",     sblock.numDataBlocks) ;
    printf(" * firstMapsBlock:\t%d\n",    sblock.firstMapsBlock) ;
    printf(" * firstInodeBlock:\t%d\n",   sblock.firstInodeBlock) ;

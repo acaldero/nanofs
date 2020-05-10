@@ -3,7 +3,7 @@ all: createdisk compile run
 
 createdisk:
 	@echo "Creating disk..."
-	dd if=/dev/zero of=tmpfile.dat bs=1024 count=32
+	dd if=/dev/zero of=disk.dat bs=1024 count=32
 	@echo ""
 
 compile:
@@ -17,8 +17,8 @@ run:
 	@echo ""
 
 view:
-	@echo "Exploring raw tmpfile.dat as char array..."
-	od -c tmpfile.dat 
+	@echo "Exploring raw disk.dat as char array..."
+	od -c disk.dat 
 
 clean:
 	@echo "Cleaning..."
@@ -26,7 +26,7 @@ clean:
 
 help:
 	@echo ""
-	@echo "make createdisk: create tmpfile.dat"
+	@echo "make createdisk: create disk.dat"
 	@echo "make compile:    compile files"
 	@echo "make run:        run the nanofs"
 	@echo "make clean:      clean intermediated files"

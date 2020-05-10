@@ -337,16 +337,15 @@ int nanofs_meta_readFromDisk ( void )
 
     // es: leer los i-nodos a memoria
     // en: read i-nodes to memory
-    int inodesRead       = 0 ;
     int inodesLeftToRead = sblock.numInodes ;
-    for (int blocksRead=0; inodesLeftToRead > 0; blocksRead++)
+    for (int blocksRead=0; (inodesLeftToRead > 0); blocksRead++)
     {
+         int inodesRead   = blocksRead*sblock.inodesPerBlock ;
          int inodesToPack = min_value(inodesLeftToRead, sblock.inodesPerBlock) ;
 
          bread(DISK, sblock.firstInodeBlock+blocksRead, b) ;
          memmove(&(inodes[inodesRead]), b, inodesToPack*sizeof(TypeInodeDisk)) ;
 
-         inodesRead       += inodesToPack ;
          inodesLeftToRead -= inodesToPack ;
     }
 
@@ -372,17 +371,16 @@ int nanofs_meta_writeToDisk ( void )
 
     // es: escribir los i-nodos a disco
     // en: write i-nodes to disk
-    int inodesWritten     = 0 ;
     int inodesLeftToWrite = sblock.numInodes ;
-    for (int blocksWritten=0; inodesLeftToWrite > 0; blocksWritten++)
+    for (int blocksWritten=0; (inodesLeftToWrite > 0); blocksWritten++)
     {
-         int inodesToPack = min_value(inodesLeftToWrite, sblock.inodesPerBlock) ;
+         int inodesWritten = blocksWritten*sblock.inodesPerBlock ;
+         int inodesToPack  = min_value(inodesLeftToWrite, sblock.inodesPerBlock) ;
 
           memset(b, 0, BLOCK_SIZE) ;
          memmove(b, &(inodes[inodesWritten]), inodesToPack*sizeof(TypeInodeDisk)) ;
          bwrite(DISK, sblock.firstInodeBlock+blocksWritten, b) ;
 
-         inodesWritten     += inodesToPack ;
          inodesLeftToWrite -= inodesToPack ;
     }
 

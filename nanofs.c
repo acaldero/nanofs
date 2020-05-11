@@ -658,6 +658,35 @@ int nanofs_write ( int fd, char *buffer, int size )
      return size ;
 }
 
+int nanofs_lseek ( int fd, int offset, int whence )
+{
+     // es: comprobar parámetros
+     // en: check params
+     if ( (fd < 0) || (fd >= sblock.numInodes) )
+     {
+         return -1 ;
+     }
+
+     // es: salta a la posici'on pedida
+     // en: seek to the requested offset
+     switch (whence) 
+     {
+         case SEEK_SET:
+              inodes_x[fd].position = offset ;
+              break ;
+         case SEEK_CUR:
+              inodes_x[fd].position = inodes_x[fd].position + offset ;
+              break ;
+         case SEEK_END:
+              inodes_x[fd].position = inodes[fd].size + offset ;
+              break ;
+     }
+
+     // es: devolver posici'on resultante
+     // en: return current position
+     return inodes_x[fd].position ;
+}
+
 
 /*
  *

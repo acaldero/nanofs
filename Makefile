@@ -8,27 +8,30 @@ createdisk:
 
 compile:
 	@echo "Compiling..."
-	gcc -o nanofs -Wall -g nanofs.c
+	gcc -Wall -g -o block.o  -c block.c
+	gcc -Wall -g -o nanofs.o -c nanofs.c
+	gcc -Wall -g -o test.o   -c test.c
+	gcc -Wall -g -o test test.o nanofs.o block.o
 	@echo ""
 
 run:
 	@echo "Running..."
-	./nanofs
+	./test
 	@echo ""
 
 view:
 	@echo "Exploring raw disk.dat as char array..."
-	od -c disk.dat 
+	od -A d -c disk.dat 
 
 clean:
 	@echo "Cleaning..."
-	rm -fr nanofs nanofs.o nanofs.dSYM
+	rm -fr test *.o test.dSYM
 
 help:
 	@echo ""
 	@echo "make createdisk: create disk.dat"
 	@echo "make compile:    compile files"
-	@echo "make run:        run the nanofs"
+	@echo "make run:        run the test"
 	@echo "make clean:      clean intermediated files"
 	@echo ""
 
